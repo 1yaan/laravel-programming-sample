@@ -12,6 +12,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Auth\Events\Registered;
 
 class OrderController extends Controller
 {
@@ -22,7 +23,8 @@ class OrderController extends Controller
      */
     public function index()
     {
-        //
+        $orders = Order::with('prefecture')->orderBy('id', 'desc')->get();
+        return view('admin.order.index')->with('orders', $orders);
     }
 
     /**
@@ -56,6 +58,7 @@ class OrderController extends Controller
     {
         $prefectures = Prefecture::orderBy('id', 'asc')->get();
         return view('order.show')
+                ->with('user', auth()->user())
                 ->with('prefectures', $prefectures->pluck('name', 'id'))
                 ->with('payments', config('payment.list'))
                 ->with('product', $product);
@@ -73,6 +76,13 @@ class OrderController extends Controller
         $prefecture = Prefecture::find($validated['prefecture_id']);
         $validated['prefecture'] = $prefecture->name;
         $validated['payment_name'] = config('payment.list.'.$validated['payment']);
+        $user = auth()->user();
+        $validated['user'] = $user;
+        if(!empty($user)) {
+            $validated['email'] = $user->email;
+            $validated['password'] = '';
+            $validated['ibTEcJ8uRTVsKCWrtW7R'] = $user->name;
+        }
         return view('order.confirm', $validated);
     }
 
@@ -89,17 +99,25 @@ class OrderController extends Controller
         $action = $request->get('action');
         if($action == 'back') return redirect('/order/'.$validated['product_id'])->withInput(); // 戻るボタン
         
-        // ハニーポットの回避
-        $validated['name'] = $validated['ibTEcJ8uRTVsKCWrtW7R'];
-        // パスワードをハッシュ化して登録
-        $validated['password'] = Hash::make($validated['password']);
-        $user = new User();
-        $user->fill($validated)->save();
+        $user = auth()->user();
+        if(empty($user)) {
+            // ハニーポットの回避
+            $validated['name'] = $validated['ibTEcJ8uRTVsKCWrtW7R'];
+            // パスワードをハッシュ化して登録
+            $validated['password'] = Hash::make($validated['password']);
+            $user = new User();
+            $user->fill($validated)->save();
 
-        // user_idを設定して登録
-        $validated['user_id'] = $user->id;
-        $profile = new Profile();
-        $profile->fill($validated)->save();
+            // user_idを設定して登録
+            $validated['user_id'] = $user->id;
+            $profile = new Profile();
+            $profile->fill($validated)->save();
+        } else {
+            $validated['name'] = $user->name;
+            $validated['user_id'] = $user->id;
+            $profile = Profile::where('user_id', $user->id)->first();
+            $profile->fill($validated)->save();
+        }
 
         // 都道府県コードの設定
         $prefecture = Prefecture::find($validated['prefecture_id']);
@@ -123,6 +141,10 @@ class OrderController extends Controller
         $user->profile = $profile;
         Mail::to($user->email)
              ->queue(new OrderMail($user, $order, $prefecture->name, $payment));
+
+        if(! auth()->user()) {
+            event(new Registered($user));
+        }
 
         return view('order.complete');
     }
