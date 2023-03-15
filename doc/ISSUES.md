@@ -28,7 +28,7 @@
 ## 4 ルーティングとController
 
 - [会社情報ページの追加](./issues/4/add-company.md)
-- [利用規約ページの追加](./issues/4/add-terms.md)
+- [特定商取引法に基づく表記ページの追加](./issues/4/add-terms.md)
 - [プライバシーポリシーページの追加](./issues/4/add-privacy.md)
 
 3ページ追加で、【0.5日】
